@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Dashboard — Alex Carter</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --border: #e2e8f0;
+    --text: #1a2332; --muted: #64748b; --hint: #94a3b8;
+    --blue: #1e40af; --blue-light: #dbeafe; --blue-text: #1e3a8a;
+    --green: #166534; --green-light: #dcfce7; --green-text: #14532d;
+    --amber: #92400e; --amber-light: #fef3c7; --amber-text: #78350f;
+    --red: #991b1b; --red-light: #fee2e2; --red-text: #7f1d1d;
+    --purple: #5b21b6; --purple-light: #ede9fe;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── IMPORT SCREEN ── */
+  #import-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 2rem; text-align: center;
+  }
+  .import-box {
+    background: var(--card); border: 2px dashed var(--border); border-radius: 16px;
+    padding: 3rem 2.5rem; max-width: 460px; width: 100%;
+  }
+  .import-icon { font-size: 48px; margin-bottom: 1rem; }
+  .import-box h1 { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 0.5rem; }
+  .import-box p { font-size: 14px; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
+  .import-btn {
+    display: inline-block; background: var(--blue); color: #fff; font-size: 15px; font-weight: 600;
+    padding: 12px 28px; border-radius: var(--radius-sm); cursor: pointer; border: none;
+    transition: background 0.15s; margin-bottom: 1rem;
+  }
+  .import-btn:hover { background: #1e3a8a; }
+  #file-input { display: none; }
+  .import-note { font-size: 12px; color: var(--hint); }
+  .import-box.drag-over { border-color: var(--blue); background: var(--blue-light); }
+
+  /* ── DASHBOARD ── */
+  #dashboard { display: none; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
+  .top-bar-left h1 { font-size: 20px; font-weight: 700; }
+  .top-bar-left p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .top-bar-right { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 8px 16px; font-size: 13px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-weight: 500; transition: all 0.15s; }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .stat-val { font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--hint); margin-top: 4px; }
+  .s-blue .stat-val { color: var(--blue); }
+  .s-green .stat-val { color: var(--green); }
+  .s-amber .stat-val { color: var(--amber); }
+  .s-red .stat-val { color: var(--red); }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  @media (max-width: 680px) { .panels { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .panel-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.25rem; border-bottom: 1.5px solid var(--border); }
+  .tab { padding: 8px 16px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1.5px; transition: all 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* FILTERS */
+  .filters { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .filters select { font-size: 13px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .filters input { font-size: 13px; padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); color: var(--text); width: 180px; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
+  th { font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; padding: 10px 14px; background: #f8fafc; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  .c-name { font-weight: 600; }
+  .c-loc { color: var(--muted); }
+  .c-notes { color: var(--muted); font-size: 12px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* BADGES */
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .b-confirmed { background: var(--green-light); color: var(--green-text); }
+  .b-pending { background: var(--amber-light); color: var(--amber-text); }
+  .b-rescheduled, .b-re-scheduled { background: var(--red-light); color: var(--red-text); }
+  .b-cancelled { background: #f1f5f9; color: var(--muted); }
+  .b-yes { background: var(--red-light); color: var(--red-text); }
+  .b-no { background: var(--green-light); color: var(--green-text); }
+
+  /* CALENDAR */
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .cal-nav h2 { font-size: 15px; font-weight: 600; }
+  .cal-nav-btns { display: flex; gap: 6px; }
+  .day-headers { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; margin-bottom: 4px; }
+  .day-hdr { font-size: 11px; color: var(--muted); text-align: center; padding: 4px; font-weight: 600; text-transform: uppercase; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-cell { min-height: 68px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px; }
+  .cal-cell.other { background: #f8fafc; }
+  .cal-cell.today { border-color: var(--blue); border-width: 2px; }
+  .day-num { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-weight: 500; }
+  .today .day-num { color: var(--blue); font-weight: 700; }
+  .ev { font-size: 10px; border-radius: 3px; padding: 2px 4px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .ev-confirmed { background: var(--green-light); color: var(--green-text); }
+  .ev-pending { background: var(--amber-light); color: var(--amber-text); }
+  .ev-rescheduled, .ev-re-scheduled { background: var(--red-light); color: var(--red-text); }
+
+  /* DETAIL MODAL */
+  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+  #modal-overlay.open { display: flex; }
+  .modal { background: var(--card); border-radius: 14px; padding: 1.5rem; max-width: 420px; width: 100%; }
+  .modal-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+  .modal-name { font-size: 17px; font-weight: 700; }
+  .modal-type { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--muted); padding: 0 4px; }
+  .modal-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .modal-row:last-of-type { border-bottom: none; }
+  .modal-row-label { color: var(--muted); width: 90px; flex-shrink: 0; font-weight: 500; }
+  .modal-row-val { color: var(--text); }
+
+  /* BARS */
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-lbl { font-size: 12px; color: var(--muted); width: 130px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: var(--bg); border-radius: 4px; height: 10px; }
+  .bar-fill { height: 10px; border-radius: 4px; transition: width 0.3s; }
+  .bar-cnt { font-size: 12px; color: var(--muted); width: 18px; text-align: right; }
+
+  /* FOLLOWUP LIST */
+  .fu-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .fu-item:last-child { border-bottom: none; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--blue-light); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--blue-text); flex-shrink: 0; }
+  .fu-name { font-size: 13px; font-weight: 600; }
+  .fu-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  /* LEGEND */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 1rem; }
+  .leg { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+  .leg-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 2rem; font-size: 14px; }
+  #current-tab-list { display: block; }
+  #current-tab-cal { display: none; }
+</style>
+</head>
+<body>
+
+<!-- IMPORT SCREEN -->
+<div id="import-screen">
+  <div class="import-box" id="drop-zone">
+    <div class="import-icon">📊</div>
+    <h1>Meeting Dashboard</h1>
+    <p>Upload your <strong>MEETING_TRACKER_MASTER.xlsx</strong> file to load your meetings. Your data never leaves your device.</p>
+    <button class="import-btn" onclick="document.getElementById('file-input').click()">
+      📂 Choose Excel File
+    </button>
+    <br>
+    <span class="import-note">Or drag and drop your .xlsx file here</span>
+    <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
+    <p id="import-error" style="color:#991b1b;font-size:13px;margin-top:1rem;display:none;"></p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <h1>📅 Meeting Dashboard</h1>
+      <p id="dash-subtitle">Alex Carter · Real Estate Meeting Tracker</p>
+    </div>
+    <div class="top-bar-right">
+      <button class="btn" onclick="resetToImport()">📂 Load New File</button>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card s-blue"><div class="stat-label">Total meetings</div><div class="stat-val" id="s-total">0</div><div class="stat-sub">All records</div></div>
+    <div class="stat-card s-green"><div class="stat-label">Confirmed</div><div class="stat-val" id="s-confirmed">0</div><div class="stat-sub">Ready to go</div></div>
+    <div class="stat-card s-amber"><div class="stat-label">Follow-up needed</div><div class="stat-val" id="s-followup">0</div><div class="stat-sub">Needs action</div></div>
+    <div class="stat-card s-red"><div class="stat-label">Re-scheduled</div><div class="stat-val" id="s-resched">0</div><div class="stat-sub">Moved</div></div>
+    <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-val" id="s-pending" style="color:var(--amber);">0</div><div class="stat-sub">Awaiting confirm</div></div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-title">⚠️ Follow-up needed</div>
+      <div id="followup-list"><div class="empty">No follow-ups needed</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📊 Meetings by type</div>
+      <div id="type-bars"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('list')">List view</div>
+    <div class="tab" onclick="switchTab('cal')">Calendar view</div>
+  </div>
+
+  <!-- LIST VIEW -->
+  <div id="current-tab-list">
+    <div class="filters">
+      <input type="text" id="search" placeholder="Search client or location..." oninput="renderTable()">
+      <select id="f-status" onchange="renderTable()">
+        <option value="all">All statuses</option>
+        <option value="Confirmed">Confirmed</option>
+        <option value="Pending">Pending</option>
+        <option value="Re-scheduled">Re-scheduled</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+      <select id="f-fu" onchange="renderTable()">
+        <option value="all">Any follow-up</option>
+        <option value="Yes">Follow-up needed</option>
+        <option value="No">No follow-up</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Client</th><th>Location</th><th>Type</th>
+            <th>Date</th><th>Time</th><th>TZ</th>
+            <th>Status</th><th>Follow-up</th><th>Contact</th><th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CALENDAR VIEW -->
+  <div id="current-tab-cal">
+    <div class="cal-nav">
+      <button class="btn" onclick="changeMonth(-1)">← Prev</button>
+      <h2 id="cal-month-label"></h2>
+      <button class="btn" onclick="changeMonth(1)">Next →</button>
+    </div>
+    <div class="day-headers">
+      <div class="day-hdr">Sun</div><div class="day-hdr">Mon</div><div class="day-hdr">Tue</div>
+      <div class="day-hdr">Wed</div><div class="day-hdr">Thu</div><div class="day-hdr">Fri</div><div class="day-hdr">Sat</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="legend">
+      <div class="leg"><div class="leg-dot" style="background:#166534;"></div>Confirmed</div>
+      <div class="leg"><div class="leg-dot" style="background:#92400e;"></div>Pending</div>
+      <div class="leg"><div class="leg-dot" style="background:#991b1b;"></div>Re-scheduled</div>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-hdr">
+      <div><div class="modal-name" id="m-name"></div><div class="modal-type" id="m-type"></div></div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div id="m-rows"></div>
+  </div>
+</div>
+
+<script>
+let meetings = [];
+let calYear, calMonth;
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      const sheetName = wb.SheetNames.find(s => s.toLowerCase().includes('tracker') || s.toLowerCase().includes('meeting')) || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!raw.length) throw new Error('No data found in the sheet.');
+      meetings = raw.map(r => {
+        const keys = Object.keys(r);
+        function find(keywords) {
+          const k = keys.find(k => keywords.some(kw => k.toLowerCase().includes(kw)));
+          return k ? String(r[k]).trim() : '';
+        }
+        let dateVal = find(['date']);
+        if (dateVal && dateVal !== '') {
+          const d = new Date(dateVal);
+          if (!isNaN(d)) dateVal = d.toISOString().split('T')[0];
+        }
+        return {
+          name: find(['client','name']),
+          loc: find(['location','property','loc']),
+          type: find(['type','meeting type']),
+          date: dateVal,
+          time: find(['time']),
+          tz: find(['timezone','tz','zone']),
+          status: find(['status']),
+          followup: find(['follow']),
+          contact: find(['contact','method']),
+          notes: find(['notes','note']),
+        };
+      }).filter(m => m.name);
+      if (!meetings.length) throw new Error('Could not read client names. Check your column headers match the template.');
+      loadDashboard();
+    } catch(err) {
+      const el = document.getElementById('import-error');
+      el.textContent = 'Error: ' + err.message;
+      el.style.display = 'block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function loadDashboard() {
+  document.getElementById('import-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  updateStats();
+  renderFollowups();
+  renderTypeBars();
+  renderTable();
+  const dates = meetings.map(m => new Date(m.date)).filter(d => !isNaN(d));
+  const earliest = dates.length ? new Date(Math.min(...dates)) : new Date();
+  calYear = earliest.getFullYear();
+  calMonth = earliest.getMonth();
+  renderCal();
+}
+
+function updateStats() {
+  document.getElementById('s-total').textContent = meetings.length;
+  document.getElementById('s-confirmed').textContent = meetings.filter(m => m.status.toLowerCase() === 'confirmed').length;
+  document.getElementById('s-followup').textContent = meetings.filter(m => m.followup.toLowerCase() === 'yes').length;
+  document.getElementById('s-resched').textContent = meetings.filter(m => m.status.toLowerCase().includes('re-sched') || m.status.toLowerCase().includes('resched')).length;
+  document.getElementById('s-pending').textContent = meetings.filter(m => m.status.toLowerCase() === 'pending').length;
+}
+
+function initials(name) { return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+function renderFollowups() {
+  const needs = meetings.filter(m => m.followup.toLowerCase() === 'yes');
+  const el = document.getElementById('followup-list');
+  if (!needs.length) { el.innerHTML = '<div class="empty">No follow-ups needed 🎉</div>'; return; }
+  el.innerHTML = needs.map(m => `
+    <div class="fu-item">
+      <div class="avatar">${initials(m.name)}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="fu-name">${m.name}</div>
+        <div class="fu-meta">${m.loc} · ${m.contact}</div>
+      </div>
+      ${badge(m.status)}
+    </div>`).join('');
+}
+
+function renderTypeBars() {
+  const counts = {};
+  meetings.forEach(m => counts[m.type] = (counts[m.type]||0)+1);
+  const max = Math.max(...Object.values(counts), 1);
+  const colors = ['#1e40af','#166534','#5b21b6','#92400e','#991b1b','#0891b2'];
+  document.getElementById('type-bars').innerHTML = Object.entries(counts).map(([t,c],i) =>
+    `<div class="bar-row">
+      <span class="bar-lbl" title="${t}">${t}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(c/max*100)}%;background:${colors[i%colors.length]};"></div></div>
+      <span class="bar-cnt">${c}</span>
+    </div>`).join('');
+}
+
+function badge(status) {
+  const s = status.toLowerCase().replace(/[\s-]/g,'');
+  const map = { confirmed:'confirmed', pending:'pending', rescheduled:'rescheduled', cancelled:'cancelled' };
+  const cls = Object.keys(map).find(k => s.includes(k)) || 'pending';
+  return `<span class="badge b-${cls}">${status}</span>`;
+}
+
+function renderTable() {
+  const fs = document.getElementById('f-status').value;
+  const ffu = document.getElementById('f-fu').value;
+  const q = document.getElementById('search').value.toLowerCase();
+  const filtered = meetings.filter(m =>
+    (fs === 'all' || m.status.toLowerCase() === fs.toLowerCase()) &&
+    (ffu === 'all' || m.followup.toLowerCase() === ffu.toLowerCase()) &&
+    (!q || m.name.toLowerCase().includes(q) || m.loc.toLowerCase().includes(q))
+  );
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = filtered.length ? filtered.map((m,i) => `
+    <tr onclick="showDetail(${meetings.indexOf(m)})" style="cursor:pointer;">
+      <td class="c-name">${m.name}</td>
+      <td class="c-loc">${m.loc}</td>
+      <td>${m.type}</td>
+      <td>${m.date}</td>
+      <td style="white-space:nowrap;">${m.time}</td>
+      <td>${m.tz}</td>
+      <td>${badge(m.status)}</td>
+      <td><span class="badge b-${m.followup.toLowerCase() === 'yes' ? 'yes' : 'no'}">${m.followup}</span></td>
+      <td>${m.contact}</td>
+      <td class="c-notes" title="${m.notes}">${m.notes}</td>
+    </tr>`).join('') : '<tr><td colspan="10" class="empty">No meetings match the filter.</td></tr>';
+}
+
+function showDetail(idx) {
+  const m = meetings[idx];
+  document.getElementById('m-name').textContent = m.name;
+  document.getElementById('m-type').textContent = m.type + ' · ' + m.loc;
+  document.getElementById('m-rows').innerHTML = [
+    ['Date', m.date], ['Time', m.time + ' ' + m.tz], ['Location', m.loc],
+    ['Contact via', m.contact], ['Status', m.status], ['Follow-up', m.followup], ['Notes', m.notes]
+  ].map(([l,v]) => `<div class="modal-row"><span class="modal-row-label">${l}</span><span class="modal-row-val">${v || '—'}</span></div>`).join('');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) { if (e.target.id === 'modal-overlay') closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+function changeMonth(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCal();
+}
+
+function renderCal() {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('cal-month-label').textContent = months[calMonth] + ' ' + calYear;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const daysInPrev = new Date(calYear, calMonth, 0).getDate();
+  const today = new Date();
+  const meetMap = {};
+  meetings.forEach(m => {
+    const d = new Date(m.date);
+    if (!isNaN(d) && d.getFullYear()===calYear && d.getMonth()===calMonth) {
+      const k = d.getDate();
+      if (!meetMap[k]) meetMap[k] = [];
+      meetMap[k].push(m);
+    }
+  });
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  for (let i=0; i<firstDay; i++) {
+    grid.innerHTML += `<div class="cal-cell other"><div class="day-num" style="opacity:0.35;">${daysInPrev-firstDay+i+1}</div></div>`;
+  }
+  for (let d=1; d<=daysInMonth; d++) {
+    const isToday = today.getDate()===d && today.getMonth()===calMonth && today.getFullYear()===calYear;
+    let html = `<div class="cal-cell${isToday?' today':''}"><div class="day-num">${d}</div>`;
+    if (meetMap[d]) meetMap[d].forEach(m => {
+      const cls = 'ev-' + m.status.toLowerCase().replace(/[\s-]/g,'');
+      html += `<div class="ev ${cls}" onclick="showDetail(${meetings.indexOf(m)})" title="${m.name}">${m.name.split(' ')[0]}</div>`;
+    });
+    html += '</div>';
+    grid.innerHTML += html;
+  }
+  const total = firstDay + daysInMonth;
+  const rem = total%7===0 ? 0 : 7-(total%7);
+  for (let i=1; i<=rem; i++) grid.innerHTML += `<div class="cal-cell other"><div class="day-num" style="opacity:0.35;">${i}</div></div>`;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab')[tab==='list'?0:1].classList.add('active');
+  document.getElementById('current-tab-list').style.display = tab==='list' ? 'block' : 'none';
+  document.getElementById('current-tab-cal').style.display = tab==='cal' ? 'block' : 'none';
+}
+
+function resetToImport() {
+  meetings = [];
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('import-screen').style.display = 'flex';
+  document.getElementById('file-input').value = '';
+  document.getElementById('import-error').style.display = 'none';
+}
+
+// Drag and drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
